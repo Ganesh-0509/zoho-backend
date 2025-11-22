@@ -1,0 +1,127 @@
+const express = require("express");
+const bodyParser = require("body-parser");
+const cors = require("cors");
+const fs = require("fs");
+const { google } = require("googleapis");
+
+const app = express();
+app.use(bodyParser.json());
+app.use(cors());
+
+// ---------------- OAUTH 2.0 CONFIG ------------------
+
+const CLIENT_ID = "86919650489-gs9ii2g2r6f7mpslg92c252809ekq1sf.apps.googleusercontent.com";
+const CLIENT_SECRET = "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";
+const REDIRECT_URI = "http://localhost:3000/oauth2callback";
+
+const oAuth2Client = new google.auth.OAuth2(
+  CLIENT_ID,
+  CLIENT_SECRET,
+  REDIRECT_URI
+);
+
+let gmailTokens = null;
+
+// STEP 1: Generate OAuth URL
+app.get("/auth-url", (req, res) => {
+  const url = oAuth2Client.generateAuthUrl({
+    access_type: "offline",
+    prompt: "consent",
+    scope: ["https://www.googleapis.com/auth/gmail.send"]
+  });
+
+  res.json({ url });
+});
+
+// STEP 2: Google Redirect Handler
+app.get("/oauth2callback", async (req, res) => {
+  const code = req.query.code;
+
+  try {
+    const { tokens } = await oAuth2Client.getToken(code);
+    gmailTokens = tokens;
+
+    fs.writeFileSync("gmail-tokens.json", JSON.stringify(tokens, null, 2));
+
+    res.send("Gmail OAuth Successful! Tokens saved. You may close this window.");
+  } catch (err) {
+    console.error(err);
+    res.send("OAuth Failed. Check console.");
+  }
+});
+
+// ---------------- GOOGLE CALENDAR (SERVICE ACCOUNT) ------------------
+
+const calendarAuth = new google.auth.GoogleAuth({
+  keyFile: "service-account.json",
+  scopes: ["https://www.googleapis.com/auth/calendar"],
+});
+
+// Create appointment event
+app.post("/create-event", async (req, res) => {
+  try {
+    const { email, name, date, startTime, endTime, service } = req.body;
+
+    const client = await calendarAuth.getClient();
+    const calendar = google.calendar({ version: "v3", auth: client });
+
+    const event = {
+      summary: `Appointment: ${service}`,
+      description: `Booked by ${name} (${email})`,
+      start: { dateTime: `${date}T${startTime}:00+05:30` },
+      end: { dateTime: `${date}T${endTime}:00+05:30` }
+    };
+
+    const response = await calendar.events.insert({
+      calendarId: "primary",
+      resource: event
+    });
+
+    res.json({
+      success: true,
+      eventId: response.data.id,
+      message: "Event created successfully"
+    });
+
+  } catch (err) {
+    console.error(err);
+    res.json({ success: false, error: err.message });
+  }
+});
+
+// ---------------- GMAIL OAUTH EMAIL SENDER ------------------
+
+app.post("/send-email", async (req, res) => {
+  try {
+    const { email, subject, message } = req.body;
+
+    const tokens = JSON.parse(fs.readFileSync("gmail-tokens.json"));
+    oAuth2Client.setCredentials(tokens);
+
+    const gmail = google.gmail({ version: "v1", auth: oAuth2Client });
+
+    const encodedMessage = Buffer.from(
+      `To: ${email}\r\nSubject: ${subject}\r\n\r\n${message}`
+    )
+      .toString("base64")
+      .replace(/\+/g, "-")
+      .replace(/\//g, "_");
+
+    await gmail.users.messages.send({
+      userId: "me",
+      requestBody: {
+        raw: encodedMessage
+      }
+    });
+
+    res.json({ success: true, message: "Email sent successfully" });
+
+  } catch (err) {
+    console.error(err);
+    res.json({ success: false, error: err.message });
+  }
+});
+
+// ---------------- SERVER ------------------
+
+app.listen(3000, () => console.log("Server running on http://localhost:3000"));
