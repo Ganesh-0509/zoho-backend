@@ -9,10 +9,9 @@ app.use(bodyParser.json());
 app.use(cors());
 
 // ---------------- OAUTH 2.0 CONFIG ------------------
-
-const CLIENT_ID = "86919650489-gs9ii2g2r6f7mpslg92c252809ekq1sf.apps.googleusercontent.com";
-const CLIENT_SECRET = "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";
-const REDIRECT_URI = "http://localhost:3000/oauth2callback";
+const CLIENT_ID = process.env.GOOGLE_CLIENT_ID;
+const CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET;
+const REDIRECT_URI = process.env.REDIRECT_URI;
 
 const oAuth2Client = new google.auth.OAuth2(
   CLIENT_ID,
