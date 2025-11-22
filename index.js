@@ -50,6 +50,15 @@ app.get("/oauth2callback", async (req, res) => {
   }
 });
 
+app.get("/debug/token", (req, res) => {
+  try {
+    const data = fs.readFileSync("gmail-tokens.json", "utf8");
+    res.send(data);
+  } catch (err) {
+    res.send("Token file not found.");
+  }
+});
+
 // ---------------- GOOGLE CALENDAR (SERVICE ACCOUNT) ------------------
 
 const calendarAuth = new google.auth.GoogleAuth({
