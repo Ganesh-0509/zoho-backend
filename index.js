@@ -59,6 +59,17 @@ app.get("/debug/token", (req, res) => {
   }
 });
 
+const path = require("path");
+
+app.get("/debug/files", (req, res) => {
+  try {
+    const files = fs.readdirSync(path.resolve("./"));
+    res.json({ files });
+  } catch (err) {
+    res.json({ error: err.message });
+  }
+});
+
 // ---------------- GOOGLE CALENDAR (SERVICE ACCOUNT) ------------------
 
 const calendarAuth = new google.auth.GoogleAuth({
