@@ -141,6 +141,57 @@ app.post("/send-email", async (req, res) => {
     res.json({ success: false, error: err.message });
   }
 });
+// ---------------- MASTER ENDPOINT FOR ZOHO BOT ------------------
+
+app.post("/book-appointment", async (req, res) => {
+  try {
+    const { name, email, date, startTime, endTime, service } = req.body;
+
+    // 1️⃣ CREATE GOOGLE CALENDAR EVENT
+    const client = await calendarAuth.getClient();
+    const calendar = google.calendar({ version: "v3", auth: client });
+
+    const event = {
+      summary: `Appointment: ${service}`,
+      description: `Booked by ${name} (${email})`,
+      start: { dateTime: `${date}T${startTime}:00+05:30` },
+      end: { dateTime: `${date}T${endTime}:00+05:30` }
+    };
+
+    const eventRes = await calendar.events.insert({
+      calendarId: "primary",
+      resource: event
+    });
+
+    // 2️⃣ SEND CONFIRMATION EMAIL
+    const tokens = JSON.parse(fs.readFileSync("gmail-tokens.json"));
+    oAuth2Client.setCredentials(tokens);
+    const gmail = google.gmail({ version: "v1", auth: oAuth2Client });
+
+    const encodedMessage = Buffer.from(
+      `To: ${email}\r\nSubject: Appointment Confirmation\r\n\r\nHi ${name},\n\nYour appointment for ${service} is confirmed on ${date} from ${startTime} to ${endTime}.\n\nThank you!`
+    )
+      .toString("base64")
+      .replace(/\+/g, "-")
+      .replace(/\//g, "_");
+
+    await gmail.users.messages.send({
+      userId: "me",
+      requestBody: { raw: encodedMessage }
+    });
+
+    // 3️⃣ SEND SUCCESS RESPONSE TO ZOHO BOT
+    res.json({
+      success: true,
+      message: "Appointment booked successfully",
+      eventId: eventRes.data.id
+    });
+
+  } catch (err) {
+    console.error(err);
+    res.json({ success: false, error: err.message });
+  }
+});
 
 // ---------------- SERVER ------------------
 const PORT = process.env.PORT || 3000;
