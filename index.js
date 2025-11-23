@@ -192,6 +192,48 @@ app.post("/book-appointment", async (req, res) => {
     res.json({ success: false, error: err.message });
   }
 });
+// ---------------- CREATE APPOINTMENT EVENT FOR ZOHO BOT ------------------
+
+app.post("/create-event", async (req, res) => {
+  try {
+    const { name, email, phone, service, date, startTime, endTime } = req.body;
+
+    if (!name || !email || !service || !date || !startTime || !endTime) {
+      return res.json({ success: false, error: "Missing required fields" });
+    }
+
+    // 1. Load OAuth tokens
+    const tokens = JSON.parse(fs.readFileSync("gmail-tokens.json"));
+    oAuth2Client.setCredentials(tokens);
+
+    // 2. Google Calendar client
+    const calendar = google.calendar({ version: "v3", auth: oAuth2Client });
+
+    // 3. Event Object
+    const event = {
+      summary: `${service} Appointment with ${name}`,
+      description: `Email: ${email}\nPhone: ${phone}`,
+      start: { dateTime: `${date}T${startTime}:00+05:30` },
+      end: { dateTime: `${date}T${endTime}:00+05:30` }
+    };
+
+    // 4. Insert event into Google Calendar
+    const calendarResponse = await calendar.events.insert({
+      calendarId: "primary",
+      resource: event
+    });
+
+    return res.json({
+      success: true,
+      message: "Google Calendar event created successfully",
+      eventId: calendarResponse.data.id
+    });
+
+  } catch (err) {
+    console.error("Calendar Error:", err);
+    return res.json({ success: false, error: err.message });
+  }
+});
 
 // ---------------- SERVER ------------------
 const PORT = process.env.PORT || 3000;
