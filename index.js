@@ -234,6 +234,52 @@ app.post("/create-event", async (req, res) => {
     return res.json({ success: false, error: err.message });
   }
 });
+// ---------------- GET AVAILABLE SLOTS ------------------
+
+app.post("/get-available-slots", async (req, res) => {
+  try {
+    const { date } = req.body;
+
+    if (!date) {
+      return res.json({ success: false, error: "Date is required" });
+    }
+
+    const client = await calendarAuth.getClient();
+    const calendar = google.calendar({ version: "v3", auth: client });
+
+    // Fetch all existing events for that date
+    const events = await calendar.events.list({
+      calendarId: "primary",
+      timeMin: `${date}T00:00:00+05:30`,
+      timeMax: `${date}T23:59:59+05:30`,
+    });
+
+    const occupied = events.data.items.map(event => {
+      const start = new Date(event.start.dateTime);
+      return start.getHours(); // return hour in 24-hour format
+    });
+
+    // Generate 1-hour slots (9 AM to 6 PM)
+    const allSlots = [];
+    for (let hour = 9; hour <= 18; hour++) {
+      allSlots.push(hour);
+    }
+
+    // Filter free slots
+    const availableSlots = allSlots
+      .filter(hour => !occupied.includes(hour))
+      .map(hour => `${hour.toString().padStart(2, "0")}:00`);
+
+    res.json({
+      success: true,
+      slots: availableSlots
+    });
+
+  } catch (err) {
+    console.error("Slot Error:", err);
+    res.json({ success: false, error: err.message });
+  }
+});
 
 // ---------------- SERVER ------------------
 const PORT = process.env.PORT || 3000;
